@@ -1,0 +1,3 @@
+[workspace]
+members = ["geometry_core", "viewer"]
+resolver = "3"
