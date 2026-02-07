@@ -1,0 +1,11 @@
+[package]
+name = "vdb_core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[dev-dependencies]
+toml = "0.8"
+[build-dependencies]
+cc = "1.0"
