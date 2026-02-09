@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-furniture_types = { path = "../furniture_types" }
+category_types = { path = "../category_types" }

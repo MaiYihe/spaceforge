@@ -5,11 +5,11 @@ use std::hash::{Hash, Hasher};
 
 use crate::camera::OrbitCamera;
 use vdb_core::VdbGrid;
-use crate::obj::load_obj_bounds;
 use crate::ui::{BBoxEntity, BBoxTextEntity, SceneInfo};
 use crate::config::{ViewMode, ViewerConfig};
 use crate::vdb_mesh::mesh_from_vdb;
 use crate::voxel_instancing::{spawn_voxel_instances, VoxelInstance};
+use asset_import::{load_obj_bounds, load_obj_mesh};
 use std::collections::HashSet;
 
 impl Hash for crate::config::Pose2D {
@@ -40,7 +40,7 @@ pub fn setup(
 
     let obj_scale = config.obj_scale; // meters -> millimeters
     let voxel_size = config.voxel_size; // mm voxels
-    let placements = &config.placements;
+    let placements = &config.assets;
 
     let mut combined_min = vec3(f32::INFINITY, f32::INFINITY, f32::INFINITY);
     let mut combined_max = vec3(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
@@ -57,8 +57,8 @@ pub fn setup(
         let translation = Vec3::new(placement.pose.x, 0.0, placement.pose.y);
         let rotation = Quat::from_rotation_y(placement.pose.theta);
 
-        let min = obj_bounds.min + translation;
-        let max = obj_bounds.max + translation;
+        let min = Vec3::from(obj_bounds.min) + translation;
+        let max = Vec3::from(obj_bounds.max) + translation;
         combined_min.x = combined_min.x.min(min.x);
         combined_min.y = combined_min.y.min(min.y);
         combined_min.z = combined_min.z.min(min.z);
@@ -135,7 +135,7 @@ pub fn setup(
                 });
             }
             ViewMode::Obj => {
-                let mut mesh = crate::obj::load_obj_mesh(&placement.obj_path, obj_scale)
+                let mut mesh = mesh_from_obj(&placement.obj_path, obj_scale)
                     .unwrap_or_else(|_| panic!("Failed to load OBJ mesh: {}", placement.obj_path));
                 apply_transform_to_mesh(&mut mesh, rotation, translation);
                 let material = materials.add(StandardMaterial {
@@ -251,6 +251,60 @@ fn apply_transform_to_mesh(mesh: &mut Mesh, rotation: Quat, translation: Vec3) {
             *n = [v.x, v.y, v.z];
         }
     }
+}
+
+fn mesh_from_obj(path: &str, scale: f32) -> Result<Mesh, String> {
+    let data = load_obj_mesh(path, scale)?;
+    let normals = compute_vertex_normals(&data.positions, &data.indices);
+    let mut mesh = Mesh::new(
+        bevy::render::mesh::PrimitiveTopology::TriangleList,
+        bevy::render::render_asset::RenderAssetUsages::default(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, data.positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_indices(bevy::render::mesh::Indices::U32(data.indices));
+    Ok(mesh)
+}
+
+fn compute_vertex_normals(positions: &[[f32; 3]], indices: &[u32]) -> Vec<[f32; 3]> {
+    let mut normals = vec![[0.0f32, 0.0f32, 0.0f32]; positions.len()];
+
+    let mut i = 0;
+    while i + 2 < indices.len() {
+        let i0 = indices[i] as usize;
+        let i1 = indices[i + 1] as usize;
+        let i2 = indices[i + 2] as usize;
+        i += 3;
+
+        if i0 >= positions.len() || i1 >= positions.len() || i2 >= positions.len() {
+            continue;
+        }
+
+        let p0 = Vec3::from(positions[i0]);
+        let p1 = Vec3::from(positions[i1]);
+        let p2 = Vec3::from(positions[i2]);
+
+        let e1 = p1 - p0;
+        let e2 = p2 - p0;
+        let n = e1.cross(e2);
+
+        normals[i0][0] += n.x;
+        normals[i0][1] += n.y;
+        normals[i0][2] += n.z;
+        normals[i1][0] += n.x;
+        normals[i1][1] += n.y;
+        normals[i1][2] += n.z;
+        normals[i2][0] += n.x;
+        normals[i2][1] += n.y;
+        normals[i2][2] += n.z;
+    }
+
+    for n in &mut normals {
+        let v = Vec3::from(*n).normalize_or_zero();
+        *n = [v.x, v.y, v.z];
+    }
+
+    normals
 }
 
 fn cube_line_mesh() -> Mesh {

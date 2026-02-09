@@ -1,4 +1,4 @@
-use furniture_types::FurnitureType;
+use category_types::{CategoryId, SurfaceId};
 
 #[derive(Debug, Clone)]
 pub struct PlacementRegion {
@@ -25,15 +25,8 @@ pub enum RegionClass {
 
 #[derive(Debug, Clone)]
 pub struct PlacementSemantics {
-    pub attach: AttachSurface,
-    pub furniture_type: FurnitureType,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AttachSurface {
-    Floor,
-    Wall,
-    Ceiling,
+    pub attach: SurfaceId,
+    pub category_id: CategoryId,
 }
 
 #[derive(Debug, Clone)]

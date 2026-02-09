@@ -2,7 +2,6 @@ use bevy::prelude::*;
 
 mod camera;
 mod config;
-mod obj;
 mod scene;
 mod ui;
 mod vdb_mesh;

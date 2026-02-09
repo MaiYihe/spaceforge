@@ -1,0 +1,13 @@
+# Surface ID mapping (engine uses IDs only)
+
+[[surfaces]]
+id = 0
+name = "floor"
+
+[[surfaces]]
+id = 1
+name = "wall"
+
+[[surfaces]]
+id = 2
+name = "ceiling"

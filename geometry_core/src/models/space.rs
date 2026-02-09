@@ -1,16 +1,9 @@
-use furniture_types::FurnitureMask;
-
-#[derive(Debug, Clone, Copy)]
-pub enum SurfaceKind {
-    Floor,
-    Wall,
-    Ceiling,
-}
+use category_types::{CategoryMask, SurfaceId};
 
 #[derive(Debug, Clone)]
 pub struct SurfaceMeta {
-    pub kind: SurfaceKind,
-    pub allowed: FurnitureMask,
+    pub kind: SurfaceId,
+    pub allowed: CategoryMask,
 }
 
 #[derive(Debug, Clone)]

@@ -24,7 +24,7 @@ pub struct ViewerConfig {
     #[serde(default = "default_obj_scale")]
     pub obj_scale: f32,
     #[serde(default)]
-    pub placements: Vec<PlacementConfig>,
+    pub assets: Vec<PlacementConfig>,
 }
 
 impl Default for ViewerConfig {
@@ -33,7 +33,7 @@ impl Default for ViewerConfig {
             mode: ViewMode::Voxel,
             voxel_size: default_voxel_size(),
             obj_scale: default_obj_scale(),
-            placements: Vec::new(),
+            assets: Vec::new(),
         }
     }
 }

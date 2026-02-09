@@ -7,18 +7,18 @@ voxel_size = 15.0
 # obj scale (meters -> millimeters)
 obj_scale = 1000.0
 
-[[placements]]
+[[assets]]
 obj_path = "../assets/models/armchair-001.obj"
 
-[placements.pose]
+[assets.pose]
 x = 0.0
 y = 0.0
 theta = 0.0
 
-[[placements]]
+[[assets]]
 obj_path = "../assets/models/tier-countertop-001.obj"
 
-[placements.pose]
+[assets.pose]
 x = 1000.0
 # 1m along +X (mm)
 y = 0.0

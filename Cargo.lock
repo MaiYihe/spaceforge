@@ -217,6 +217,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "asset_import"
+version = "0.1.0"
+
+[[package]]
 name = "async-broadcast"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1219,6 +1223,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "category_types"
+version = "0.1.0"
+dependencies = [
+ "bitflags 2.10.0",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1735,13 +1746,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
-name = "furniture_types"
-version = "0.1.0"
-dependencies = [
- "bitflags 2.10.0",
-]
-
-[[package]]
 name = "futures-core"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1789,7 +1793,7 @@ dependencies = [
 name = "geometry_core"
 version = "0.1.0"
 dependencies = [
- "furniture_types",
+ "category_types",
 ]
 
 [[package]]
@@ -3495,6 +3499,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "viewer"
 version = "0.1.0"
 dependencies = [
+ "asset_import",
  "bevy",
  "bytemuck",
  "serde",
