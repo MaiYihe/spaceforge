@@ -1,0 +1,46 @@
+# Region type ID mapping (engine uses IDs only)
+# Keep IDs in [0, 31] to fit RegionsTypeMask
+
+[[regions_types]]
+id = 0
+name = "door"
+
+[[regions_types]]
+id = 1
+name = "window"
+
+[[regions_types]]
+id = 2
+name = "wall_art"
+
+[[regions_types]]
+id = 3
+name = "tv"
+
+[[regions_types]]
+id = 4
+name = "air_conditioner"
+
+[[regions_types]]
+id = 5
+name = "cabinet"
+
+[[regions_types]]
+id = 6
+name = "table"
+
+[[regions_types]]
+id = 7
+name = "chair"
+
+[[regions_types]]
+id = 8
+name = "bed"
+
+[[regions_types]]
+id = 9
+name = "floor_lamp"
+
+[[regions_types]]
+id = 10
+name = "pendant_light"

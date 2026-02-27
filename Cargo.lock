@@ -219,6 +219,12 @@ dependencies = [
 [[package]]
 name = "asset_import"
 version = "0.1.0"
+dependencies = [
+ "geometry_core",
+ "serde",
+ "toml",
+ "types",
+]
 
 [[package]]
 name = "async-broadcast"
@@ -1223,13 +1229,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "category_types"
-version = "0.1.0"
-dependencies = [
- "bitflags 2.10.0",
-]
-
-[[package]]
 name = "cc"
 version = "1.2.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1793,7 +1792,7 @@ dependencies = [
 name = "geometry_core"
 version = "0.1.0"
 dependencies = [
- "category_types",
+ "types",
 ]
 
 [[package]]
@@ -3426,6 +3425,13 @@ name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
+
+[[package]]
+name = "types"
+version = "0.1.0"
+dependencies = [
+ "bitflags 2.10.0",
+]
 
 [[package]]
 name = "typewit"

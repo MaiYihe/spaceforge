@@ -1,18 +1,19 @@
-use category_types::{CategoryMask, SurfaceId};
+use types::RegionsTypeMask;
 
 #[derive(Debug, Clone)]
 pub struct SurfaceMeta {
-    pub kind: SurfaceId,
-    pub allowed: CategoryMask,
+    pub regions_type_mask: RegionsTypeMask,
 }
 
 #[derive(Debug, Clone)]
 pub struct Space {
-    pub mesh: Mesh,
+    pub meshes: Vec<Mesh>,
     /// 每个 surface 对应一个 metadata
-    pub surfaces: Vec<SurfaceMeta>,
+    pub surface_metas: Vec<SurfaceMeta>,
 }
 
-// ---------- Placeholder geometry type ----------
-#[derive(Debug, Clone)]
-pub struct Mesh;
+#[derive(Debug, Clone, Default)]
+pub struct Mesh {
+    pub positions: Vec<[f32; 3]>,
+    pub indices: Vec<u32>,
+}

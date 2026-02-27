@@ -9,7 +9,7 @@ use crate::ui::{BBoxEntity, BBoxTextEntity, SceneInfo};
 use crate::config::{ViewMode, ViewerConfig};
 use crate::vdb_mesh::mesh_from_vdb;
 use crate::voxel_instancing::{spawn_voxel_instances, VoxelInstance};
-use asset_import::{load_obj_bounds, load_obj_mesh};
+use asset_import::{load_bounds, load_mesh};
 use std::collections::HashSet;
 
 impl Hash for crate::config::Pose2D {
@@ -51,8 +51,8 @@ pub fn setup(
     let cube_line = meshes.add(cube_line_mesh());
 
     for placement in placements {
-        let obj_bounds =
-            load_obj_bounds(&placement.obj_path, obj_scale).expect("Failed to load OBJ");
+        let obj_bounds = load_bounds(&placement.obj_path, obj_scale)
+            .unwrap_or_else(|_| panic!("Failed to load mesh bounds: {}", placement.obj_path));
 
         let translation = Vec3::new(placement.pose.x, 0.0, placement.pose.y);
         let rotation = Quat::from_rotation_y(placement.pose.theta);
@@ -135,8 +135,8 @@ pub fn setup(
                 });
             }
             ViewMode::Obj => {
-                let mut mesh = mesh_from_obj(&placement.obj_path, obj_scale)
-                    .unwrap_or_else(|_| panic!("Failed to load OBJ mesh: {}", placement.obj_path));
+                let mut mesh = mesh_from_asset(&placement.obj_path, obj_scale)
+                    .unwrap_or_else(|_| panic!("Failed to load mesh: {}", placement.obj_path));
                 apply_transform_to_mesh(&mut mesh, rotation, translation);
                 let material = materials.add(StandardMaterial {
                     base_color: Color::rgb(0.97, 0.97, 0.97),
@@ -253,8 +253,8 @@ fn apply_transform_to_mesh(mesh: &mut Mesh, rotation: Quat, translation: Vec3) {
     }
 }
 
-fn mesh_from_obj(path: &str, scale: f32) -> Result<Mesh, String> {
-    let data = load_obj_mesh(path, scale)?;
+fn mesh_from_asset(path: &str, scale: f32) -> Result<Mesh, String> {
+    let data = load_mesh(path, scale)?;
     let normals = compute_vertex_normals(&data.positions, &data.indices);
     let mut mesh = Mesh::new(
         bevy::render::mesh::PrimitiveTopology::TriangleList,

@@ -1,25 +1,24 @@
 use bitflags::bitflags;
 
-pub type CategoryId = u32;
-pub type SurfaceId = u32;
+pub type RegionsTypeId = u32;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct CategoryMask: u32 {
+    pub struct RegionsTypeMask: u32 {
         const NONE = 0;
         const ALL = u32::MAX;
     }
 }
 
-impl CategoryMask {
-    pub fn from_id(id: CategoryId) -> Option<Self> {
+impl RegionsTypeMask {
+    pub fn from_id(id: RegionsTypeId) -> Option<Self> {
         if id >= 32 {
             return None;
         }
-        Some(CategoryMask::from_bits_truncate(1u32 << id))
+        Some(RegionsTypeMask::from_bits_truncate(1u32 << id))
     }
 
-    pub fn contains_id(self, id: CategoryId) -> bool {
+    pub fn contains_id(self, id: RegionsTypeId) -> bool {
         if let Some(mask) = Self::from_id(id) {
             self.contains(mask)
         } else {
@@ -27,7 +26,7 @@ impl CategoryMask {
         }
     }
 
-    pub fn insert_id(&mut self, id: CategoryId) -> bool {
+    pub fn insert_id(&mut self, id: RegionsTypeId) -> bool {
         if let Some(mask) = Self::from_id(id) {
             self.insert(mask);
             true
