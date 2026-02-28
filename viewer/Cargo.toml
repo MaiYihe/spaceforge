@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-vdb_core = { path = "../vdb_core" }
 bevy = "0.13"
-bytemuck = { version = "1.14", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 asset_import = { path = "../asset_import" }

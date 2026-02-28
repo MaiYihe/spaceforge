@@ -4,10 +4,8 @@ mod camera;
 mod config;
 mod scene;
 mod ui;
-mod vdb_mesh;
-mod voxel_instancing;
 
-pub use config::{PlacementConfig, Pose2D, ViewMode, ViewerConfig};
+pub use config::ViewerConfig;
 
 pub fn run() {
     run_with_config(ViewerConfig::default());
@@ -16,7 +14,6 @@ pub fn run() {
 pub fn run_with_config(config: ViewerConfig) {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(voxel_instancing::VoxelInstancingPlugin)
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::MouseState::default())
         .insert_resource(config)

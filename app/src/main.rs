@@ -30,11 +30,11 @@ fn load_viewer_config() -> viewer::ViewerConfig {
     let data = match fs::read_to_string(&path) {
         Ok(data) => data,
         Err(err) => {
-        eprintln!(
-            "Failed to read asset import config at {}: {}",
-            path.display(),
-            err
-        );
+            eprintln!(
+                "Failed to read asset import config at {}: {}",
+                path.display(),
+                err
+            );
             return viewer::ViewerConfig::default();
         }
     };
@@ -55,12 +55,16 @@ fn load_viewer_config() -> viewer::ViewerConfig {
 #[cfg(feature = "viewer")]
 fn resolve_viewer_paths(config_path: &std::path::Path, config: &mut viewer::ViewerConfig) {
     let base = config_path.parent().unwrap_or_else(|| std::path::Path::new("."));
-    for placement in &mut config.assets {
-        let p = std::path::Path::new(&placement.obj_path);
-        if p.is_absolute() {
-            continue;
-        }
-        let joined = base.join(p);
-        placement.obj_path = joined.to_string_lossy().into_owned();
+    config.space_usda_path = resolve_path(base, &config.space_usda_path);
+    config.placement_region_usda_path = resolve_path(base, &config.placement_region_usda_path);
+    config.regions_type_path = resolve_path(base, &config.regions_type_path);
+}
+
+#[cfg(feature = "viewer")]
+fn resolve_path(base: &std::path::Path, raw: &str) -> String {
+    let p = std::path::Path::new(raw);
+    if p.is_absolute() {
+        return raw.to_string();
     }
+    base.join(p).to_string_lossy().into_owned()
 }

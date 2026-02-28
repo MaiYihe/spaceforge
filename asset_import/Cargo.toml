@@ -8,3 +8,7 @@ geometry_core = { path = "../geometry_core" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 types = { path = "../types" }
+usd_core = { path = "../usd_core" }
+
+[dev-dependencies]
+serde_json = "1"

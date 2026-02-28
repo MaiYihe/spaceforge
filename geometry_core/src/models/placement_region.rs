@@ -1,9 +1,9 @@
-use types::RegionsTypeId;
+use types::RegionsType;
 
 #[derive(Debug, Clone)]
 pub struct PlacementRegion {
     /// 几何区域
-    pub region: Regions,
+    pub regions: Regions,
     /// 部署语义（规则层）
     pub semantics: PlacementSemantics,
     /// 可视化壳（纯 display）
@@ -12,8 +12,8 @@ pub struct PlacementRegion {
 
 #[derive(Debug, Clone)]
 pub struct Regions {
-    pub forbidden: Vec<Region>,
-    pub restricted: Vec<Region>,
+    pub forbidden_region: Region,
+    pub restricted_region: Region,
 }
 
 #[derive(Debug, Clone)]
@@ -24,7 +24,8 @@ pub struct Region {
 
 #[derive(Debug, Clone)]
 pub struct PlacementSemantics {
-    pub regions_type_id: RegionsTypeId,
+    pub regions_type: RegionsType,
+    pub count: i32,
 }
 
 #[derive(Debug, Clone)]

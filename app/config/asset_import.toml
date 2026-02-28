@@ -1,25 +1,5 @@
-# view mode: "sdf", "voxel", "obj"
-mode = "sdf"
-
-# voxel size (mm)
-voxel_size = 15.0
-
-# obj scale (meters -> millimeters)
-obj_scale = 1000.0
-
-[[assets]]
-obj_path = "../assets/models/armchair-001.obj"
-
-[assets.pose]
-x = 0.0
-y = 0.0
-theta = 0.0
-
-[[assets]]
-obj_path = "../assets/models/tier-countertop-001.obj"
-
-[assets.pose]
-x = 1000.0
-# 1m along +X (mm)
-y = 0.0
-theta = 2.0
+space_usda_path = "../assets/models/input_space/room.usda"
+placement_region_usda_path = "../assets/models/input_placement_region/chair0.usda"
+regions_type_path = "../config/regions_types.toml"
+# meters -> millimeters (or any unit scale you want)
+usda_scale = 1.0

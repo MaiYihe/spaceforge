@@ -1,8 +1,8 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
-use types::{RegionsTypeId, RegionsTypeMask};
+use types::{RegionsType, RegionsTypeMask};
+use usd_core::{SpaceUsd, UsdMesh};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Bounds3 {
@@ -16,27 +16,18 @@ pub struct MeshData {
     pub indices: Vec<u32>,
 }
 
-#[derive(Debug,  Deserialize)]
+#[derive(Debug, Deserialize)]
 struct RegionsTypeConfig {
     regions_types: Vec<RegionsTypeItem>,
 }
 
 #[derive(Debug, Deserialize)]
 struct RegionsTypeItem {
-    id: RegionsTypeId,
+    id: RegionsType,
     name: String,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct ParsedMesh {
-    pub name: String,
-    pub points: Vec<[f32; 3]>,
-    pub face_counts: Vec<usize>,
-    pub face_indices: Vec<usize>,
-    pub regions_type_names : Vec<String>,
-}
-
-pub fn load_regions_type_registry(path: &str) -> Result<HashMap<String, RegionsTypeId>, String> {
+pub fn load_regions_type_registry(path: &str) -> Result<HashMap<String, RegionsType>, String> {
     let data = fs::read_to_string(path)
         .map_err(|e| format!("read regions types config failed ({path}): {e}"))?;
     let config: RegionsTypeConfig =
@@ -50,7 +41,6 @@ pub fn load_regions_type_registry(path: &str) -> Result<HashMap<String, RegionsT
 }
 
 pub fn load_bounds(path: &str, scale: f32) -> Result<Bounds3, String> {
-    ensure_usda(path)?;
     let mesh = load_mesh(path, scale)?;
     if mesh.positions.is_empty() {
         return Err("usda has no vertices".to_string());
@@ -71,15 +61,19 @@ pub fn load_bounds(path: &str, scale: f32) -> Result<Bounds3, String> {
 }
 
 pub fn load_mesh(path: &str, scale: f32) -> Result<MeshData, String> {
-    ensure_usda(path)?;
-    let data = fs::read_to_string(path).map_err(|e| format!("read usda failed: {e}"))?;
-    let meshes = parse_usda_meshes(&data)?;
+    let meshes = usd_core::load_space_usda(path)?;
+    mesh_data_from_scene(&meshes, scale)
+}
 
+pub(crate) fn mesh_data_from_scene(
+    scene: &[SpaceUsd],
+    scale: f32,
+) -> Result<MeshData, String> {
     let mut merged_positions = Vec::<[f32; 3]>::new();
     let mut merged_indices = Vec::<u32>::new();
 
-    for mesh in meshes {
-        let local = to_mesh_data(&mesh, scale)?;
+    for mesh in scene {
+        let local = to_mesh_data_from_usd(&mesh.mesh, scale)?;
         append_mesh_data(&mut merged_positions, &mut merged_indices, &local);
     }
 
@@ -93,207 +87,12 @@ pub fn load_mesh(path: &str, scale: f32) -> Result<MeshData, String> {
     })
 }
 
-pub(crate) fn ensure_usda(path: &str) -> Result<(), String> {
-    let ext = Path::new(path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-        .ok_or_else(|| format!("path has no extension: {path}"))?;
-    if ext != "usda" {
-        return Err(format!("unsupported format .{ext}; only .usda is supported"));
-    }
-    Ok(())
-}
-
-pub(crate) fn extract_first_xform_name(content: &str) -> Option<String> {
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        if !trimmed.starts_with("def Xform ") {
-            continue;
-        }
-        let start = trimmed.find('"')? + 1;
-        let remain = &trimmed[start..];
-        let end_rel = remain.find('"')?;
-        let name = &remain[..end_rel];
-        if name != "HoudiniLayerInfo" {
-            return Some(name.to_string());
-        }
-    }
-    None
-}
-
-pub(crate) fn parse_usda_meshes(content: &str) -> Result<Vec<ParsedMesh>, String> {
-    let mut out = Vec::<ParsedMesh>::new();
-    let mut cursor = 0usize;
-
-    while let Some(rel) = content[cursor..].find("def Mesh \"") {
-        let mesh_decl_start = cursor + rel;
-        let name_start = mesh_decl_start + "def Mesh \"".len();
-        let Some(name_end_rel) = content[name_start..].find('"') else {
-            return Err("malformed mesh declaration".to_string());
-        };
-        let name_end = name_start + name_end_rel;
-        let name = content[name_start..name_end].to_string();
-
-        let Some(brace_start_rel) = content[name_end..].find('{') else {
-            return Err(format!("mesh '{name}' has no opening brace"));
-        };
-        let brace_start = name_end + brace_start_rel;
-        let brace_end = find_matching_brace(content, brace_start)
-            .ok_or_else(|| format!("mesh '{name}' has unclosed brace"))?;
-        let block = &content[brace_start + 1..brace_end];
-
-        let points_src = extract_bracketed_after(block, "point3f[] points")
-            .ok_or_else(|| format!("mesh '{name}' missing points"))?;
-        let counts_src = extract_bracketed_after(block, "int[] faceVertexCounts")
-            .ok_or_else(|| format!("mesh '{name}' missing faceVertexCounts"))?;
-        let indices_src = extract_bracketed_after(block, "int[] faceVertexIndices")
-            .ok_or_else(|| format!("mesh '{name}' missing faceVertexIndices"))?;
-        let mask_src = extract_bracketed_after(block, "custom string[] regionsTypeMask");
-
-        let points = parse_points(&points_src)?;
-        let face_counts = parse_usize_list(&counts_src)?;
-        let face_indices = parse_usize_list(&indices_src)?;
-        let regions_type_names = if let Some(raw) = mask_src {
-            parse_string_list(&raw)
-        } else {
-            Vec::new()
-        };
-
-        out.push(ParsedMesh {
-            name,
-            points,
-            face_counts,
-            face_indices,
-            regions_type_names,
-        });
-
-        cursor = brace_end + 1;
-    }
-
-    if out.is_empty() {
-        return Err("usda contains no Mesh blocks".to_string());
-    }
-
-    Ok(out)
-}
-
-fn find_matching_brace(s: &str, open_idx: usize) -> Option<usize> {
-    let bytes = s.as_bytes();
-    let mut depth = 0usize;
-    let mut i = open_idx;
-
-    while i < bytes.len() {
-        match bytes[i] {
-            b'{' => depth += 1,
-            b'}' => {
-                if depth == 0 {
-                    return None;
-                }
-                depth -= 1;
-                if depth == 0 {
-                    return Some(i);
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-
-    None
-}
-
-fn extract_bracketed_after(haystack: &str, needle: &str) -> Option<String> {
-    let start = haystack.find(needle)?;
-    let rhs = &haystack[start + needle.len()..];
-    let eq = rhs.find('=')?;
-    let rhs = &rhs[eq + 1..];
-    let open = rhs.find('[')?;
-    let mut depth = 0usize;
-    let mut end = None;
-
-    for (i, ch) in rhs.char_indices().skip(open) {
-        if ch == '[' {
-            depth += 1;
-        } else if ch == ']' {
-            if depth == 0 {
-                return None;
-            }
-            depth -= 1;
-            if depth == 0 {
-                end = Some(i);
-                break;
-            }
-        }
-    }
-
-    let end = end?;
-    Some(rhs[open + 1..end].to_string())
-}
-
-fn parse_points(src: &str) -> Result<Vec<[f32; 3]>, String> {
-    let mut points = Vec::<[f32; 3]>::new();
-    let mut cursor = 0usize;
-
-    while let Some(open_rel) = src[cursor..].find('(') {
-        let open = cursor + open_rel;
-        let Some(close_rel) = src[open + 1..].find(')') else {
-            return Err("invalid point tuple in points array".to_string());
-        };
-        let close = open + 1 + close_rel;
-        let tuple = &src[open + 1..close];
-        let vals: Vec<&str> = tuple.split(',').map(|v| v.trim()).collect();
-        if vals.len() != 3 {
-            return Err("point tuple is not float3".to_string());
-        }
-        let x: f32 = vals[0].parse().map_err(|_| "invalid x in points".to_string())?;
-        let y: f32 = vals[1].parse().map_err(|_| "invalid y in points".to_string())?;
-        let z: f32 = vals[2].parse().map_err(|_| "invalid z in points".to_string())?;
-        points.push([x, y, z]);
-        cursor = close + 1;
-    }
-
-    if points.is_empty() {
-        return Err("points array is empty".to_string());
-    }
-
-    Ok(points)
-}
-
-fn parse_usize_list(src: &str) -> Result<Vec<usize>, String> {
-    let mut out = Vec::<usize>::new();
-    for token in src
-        .split(|c: char| c == ',' || c.is_ascii_whitespace())
-        .filter(|t| !t.is_empty())
-    {
-        let n: isize = token
-            .parse()
-            .map_err(|_| format!("invalid integer token: {token}"))?;
-        if n < 0 {
-            return Err(format!("negative index/count is unsupported in USDA parser: {n}"));
-        }
-        out.push(n as usize);
-    }
-    Ok(out)
-}
-
-fn parse_string_list(src: &str) -> Vec<String> {
-    let mut out = Vec::<String>::new();
-    let mut cursor = 0usize;
-    while let Some(start_rel) = src[cursor..].find('"') {
-        let start = cursor + start_rel + 1;
-        let Some(end_rel) = src[start..].find('"') else {
-            break;
-        };
-        let end = start + end_rel;
-        out.push(src[start..end].to_string());
-        cursor = end + 1;
-    }
-    out
-}
-
-pub(crate) fn to_mesh_data(mesh: &ParsedMesh, scale: f32) -> Result<MeshData, String> {
+pub(crate) fn to_mesh_data_from_usd(
+    mesh: &UsdMesh,
+    scale: f32,
+) -> Result<MeshData, String> {
     let positions: Vec<[f32; 3]> = mesh
+        .mesh
         .points
         .iter()
         .map(|p| [p[0] * scale, p[1] * scale, p[2] * scale])
@@ -302,24 +101,25 @@ pub(crate) fn to_mesh_data(mesh: &ParsedMesh, scale: f32) -> Result<MeshData, St
     let mut indices = Vec::<u32>::new();
     let mut cursor = 0usize;
 
-    for &count in &mesh.face_counts {
+    for &count in &mesh.mesh.counts {
+        let count = count as usize;
         if count < 3 {
             cursor = cursor.saturating_add(count);
             continue;
         }
-        if cursor + count > mesh.face_indices.len() {
+        if cursor + count > mesh.mesh.indices.len() {
             return Err(format!(
                 "mesh '{}' has inconsistent face counts/indices",
-                mesh.name
+                mesh.path
             ));
         }
 
-        let base = mesh.face_indices[cursor];
+        let base = mesh.mesh.indices[cursor] as usize;
         for i in 1..count - 1 {
-            let i1 = mesh.face_indices[cursor + i];
-            let i2 = mesh.face_indices[cursor + i + 1];
+            let i1 = mesh.mesh.indices[cursor + i] as usize;
+            let i2 = mesh.mesh.indices[cursor + i + 1] as usize;
             if base >= positions.len() || i1 >= positions.len() || i2 >= positions.len() {
-                return Err(format!("mesh '{}' has out-of-range face index", mesh.name));
+                return Err(format!("mesh '{}' has out-of-range face index", mesh.path));
             }
             indices.push(base as u32);
             indices.push(i1 as u32);
@@ -330,7 +130,7 @@ pub(crate) fn to_mesh_data(mesh: &ParsedMesh, scale: f32) -> Result<MeshData, St
     }
 
     if positions.is_empty() || indices.is_empty() {
-        return Err(format!("mesh '{}' has no triangles", mesh.name));
+        return Err(format!("mesh '{}' has no triangles", mesh.path));
     }
 
     Ok(MeshData { positions, indices })
@@ -350,7 +150,7 @@ fn append_mesh_data(
 
 pub(crate) fn mask_from_names(
     names: &[String],
-    regions_type_ids: &HashMap<String, RegionsTypeId>,
+    regions_type_ids: &HashMap<String, RegionsType>,
 ) -> Result<RegionsTypeMask, String> {
     let mut mask = RegionsTypeMask::NONE;
     for name in names {
