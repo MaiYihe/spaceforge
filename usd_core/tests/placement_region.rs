@@ -10,7 +10,7 @@ fn load_placement_region_usda_smoke() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("usd_core has no parent dir");
-    let path = root.join("app/assets/models/input_placement_region/chair0.usda");
+    let path = root.join("assets/assets/models/input_placement_region/chair0.usda");
     let path = path
         .to_str()
         .expect("room.usda path is not valid UTF-8");

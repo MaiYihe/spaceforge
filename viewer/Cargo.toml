@@ -6,4 +6,8 @@ edition = "2021"
 [dependencies]
 bevy = "0.13"
 serde = { version = "1.0", features = ["derive"] }
-asset_import = { path = "../asset_import" }
+assets_import = { path = "../assets_import" }
+geometry_core = { path = "../geometry_core" }
+crossbeam-channel = "0.5"
+serde_json = "1"
+notify = "6"

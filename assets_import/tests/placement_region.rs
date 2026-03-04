@@ -10,20 +10,20 @@ fn load_placement_region_model_smoke() {
 
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .expect("asset_import has no parent dir");
-    let path = root.join("app/assets/models/input_placement_region/chair0.usda");
+        .expect("assets_import has no parent dir");
+    let path = root.join("assets/assets/models/input_placement_region/chair0.usda");
     let path = path
         .to_str()
         .expect("chair0.usda path is not valid UTF-8");
 
-    let regions_type_path = root.join("app/config/regions_types.toml");
+    let regions_type_path = root.join("assets/config/regions_types.toml");
     let regions_type_path = regions_type_path
         .to_str()
         .expect("regions_type.toml path is not valid UTF-8");
-    let regions_type_ids = asset_import::load_regions_type_registry(regions_type_path)
+    let regions_type_ids = assets_import::load_regions_type_registry(regions_type_path)
         .expect("load_regions_type_registry failed");
 
-    let region = asset_import::load_placement_region_model_from_usda(path, &regions_type_ids, 1.0)
+    let region = assets_import::load_placement_region_model_from_usda(path, &regions_type_ids, 1.0)
         .expect("load_placement_region_model_from_usda failed");
 
     let restricted_vertices = region.regions.restricted_region.mesh.positions.len();
@@ -60,4 +60,4 @@ fn load_placement_region_model_smoke() {
     );
 }
 
-// USD_CORE_TEST=1 cargo test -p asset_import --test placement_region -- --nocapture
+// USD_CORE_TEST=1 cargo test -p assets_import --test placement_region -- --nocapture

@@ -13,6 +13,7 @@ struct PlacementRegionMeshJson {
 
 #[derive(Debug, Deserialize)]
 struct PlacementRegionUsdJson {
+    unit: Option<String>,
     #[serde(rename = "regionsTypeName")]
     regions_type_name: String,
     name: String,
@@ -29,7 +30,7 @@ struct PlacementRegionUsdJson {
 
 pub fn load_placement_region_usda(path: &str) -> Result<PlacementRegionUsd, String> {
     let script = resolve_script_path(
-        "app/assets/models/input_placement_region/parse_placement_region_usda.py",
+        "assets/assets/models/input_placement_region/parse_placement_region_usda.py",
     )?;
     let stdout = run_python(&script, path)?;
 
@@ -37,6 +38,7 @@ pub fn load_placement_region_usda(path: &str) -> Result<PlacementRegionUsd, Stri
         serde_json::from_str(&stdout).map_err(|e| format!("parse usd json failed: {e}"))?;
 
     Ok(PlacementRegionUsd {
+        unit: region.unit,
         regions_type_name: region.regions_type_name,
         name: region.name,
         count: region.count,

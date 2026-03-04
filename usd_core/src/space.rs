@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use crate::common::{resolve_script_path, run_python};
-use crate::types::{SpaceUsd, UsdMesh, UsdMeshData};
+use crate::types::{SpaceUsd, SpaceUsdScene, UsdMesh, UsdMeshData};
 
 #[derive(Debug, Deserialize)]
 struct UsdMeshJson {
@@ -13,25 +13,35 @@ struct UsdMeshJson {
     regions_type_mask: Option<Vec<String>>,
 }
 
-pub fn load_space_usda(path: &str) -> Result<Vec<SpaceUsd>, String> {
-    let script = resolve_script_path("app/assets/models/input_space/parse_space_usda.py")?;
+#[derive(Debug, Deserialize)]
+struct SpaceSceneJson {
+    unit: Option<String>,
+    meshes: Vec<UsdMeshJson>,
+}
+
+pub fn load_space_usda(path: &str) -> Result<SpaceUsdScene, String> {
+    let script = resolve_script_path("assets/assets/models/input_space/parse_space_usda.py")?;
     let stdout = run_python(&script, path)?;
 
-    let meshes: Vec<UsdMeshJson> =
+    let scene: SpaceSceneJson =
         serde_json::from_str(&stdout).map_err(|e| format!("parse usd json failed: {e}"))?;
 
-    Ok(meshes
-        .into_iter()
-        .map(|mesh| SpaceUsd {
-            mesh: UsdMesh {
-                path: mesh.path,
-                mesh: UsdMeshData {
-                    points: mesh.points,
-                    indices: mesh.indices,
-                    counts: mesh.counts,
+    Ok(SpaceUsdScene {
+        unit: scene.unit,
+        meshes: scene
+            .meshes
+            .into_iter()
+            .map(|mesh| SpaceUsd {
+                mesh: UsdMesh {
+                    path: mesh.path,
+                    mesh: UsdMeshData {
+                        points: mesh.points,
+                        indices: mesh.indices,
+                        counts: mesh.counts,
+                    },
                 },
-            },
-            regions_type_mask: mesh.regions_type_mask,
-        })
-        .collect())
+                regions_type_mask: mesh.regions_type_mask,
+            })
+            .collect(),
+    })
 }

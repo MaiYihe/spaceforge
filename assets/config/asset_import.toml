@@ -1,5 +1,5 @@
 space_usda_path = "../assets/models/input_space/room.usda"
-placement_region_usda_path = "../assets/models/input_placement_region/chair0.usda"
+placement_region_usda_dir = "../assets/models/input_placement_region"
 regions_type_path = "../config/regions_types.toml"
 # meters -> millimeters (or any unit scale you want)
 usda_scale = 1.0

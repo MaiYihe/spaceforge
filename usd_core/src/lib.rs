@@ -5,4 +5,4 @@ mod types;
 
 pub use placement_region::load_placement_region_usda;
 pub use space::load_space_usda;
-pub use types::{PlacementRegionUsd, SpaceUsd, UsdMesh, UsdMeshData};
+pub use types::{PlacementRegionUsd, SpaceUsd, SpaceUsdScene, UsdMesh, UsdMeshData};

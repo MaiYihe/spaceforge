@@ -50,7 +50,7 @@ pub fn camera_input(
     }
 
     for ev in wheel_events.read() {
-        cam.distance -= ev.y * 50.0;
+        cam.distance -= ev.y * 200.0;
         cam.distance = cam.distance.clamp(100.0, 200_000.0);
     }
 }

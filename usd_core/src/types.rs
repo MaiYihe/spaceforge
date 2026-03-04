@@ -19,6 +19,7 @@ pub struct SpaceUsd {
 
 #[derive(Debug, Clone)]
 pub struct PlacementRegionUsd {
+    pub unit: Option<String>,
     pub regions_type_name: String,
     pub name: String,
     pub count: Option<i32>,
@@ -26,4 +27,10 @@ pub struct PlacementRegionUsd {
     pub restricted_region: Option<UsdMesh>,
     pub forbidden_region: Option<UsdMesh>,
     pub footprint_2d: Option<UsdMesh>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SpaceUsdScene {
+    pub unit: Option<String>,
+    pub meshes: Vec<SpaceUsd>,
 }

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 pub fn load_first_obj_path() -> Result<String, String> {
     let config_path = std::env::var("VIEWER_CONFIG")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("app/config/viewer.toml"));
+        .unwrap_or_else(|_| PathBuf::from("assets/config/viewer.toml"));
 
     let data = fs::read_to_string(&config_path)
         .map_err(|e| format!("read config failed: {}", e))?;

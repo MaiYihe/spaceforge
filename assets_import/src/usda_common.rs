@@ -61,8 +61,9 @@ pub fn load_bounds(path: &str, scale: f32) -> Result<Bounds3, String> {
 }
 
 pub fn load_mesh(path: &str, scale: f32) -> Result<MeshData, String> {
-    let meshes = usd_core::load_space_usda(path)?;
-    mesh_data_from_scene(&meshes, scale)
+    let scene = usd_core::load_space_usda(path)?;
+    let scale = scale * unit_scale_factor(scene.unit.as_deref())?;
+    mesh_data_from_scene(&scene.meshes, scale)
 }
 
 pub(crate) fn mesh_data_from_scene(
@@ -85,6 +86,19 @@ pub(crate) fn mesh_data_from_scene(
         positions: merged_positions,
         indices: merged_indices,
     })
+}
+
+fn unit_scale_factor(unit: Option<&str>) -> Result<f32, String> {
+    let unit = match unit {
+        Some(u) => u.trim().to_ascii_lowercase(),
+        None => return Ok(1.0),
+    };
+    match unit.as_str() {
+        "mm" => Ok(1.0),
+        "cm" => Ok(10.0),
+        "m" | "meter" | "meters" => Ok(1000.0),
+        other => Err(format!("unsupported unit '{other}'")),
+    }
 }
 
 pub(crate) fn to_mesh_data_from_usd(
