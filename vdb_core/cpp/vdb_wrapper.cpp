@@ -16,65 +16,47 @@ void vdb_init() {
     openvdb::initialize();
 }
 
-static bool parse_obj(
-    const char* path,
-    std::vector<openvdb::Vec3s>& points,
-    std::vector<openvdb::Vec3I>& triangles,
+// OBJ parsing removed; we now build SDF directly from mesh data.
+
+// 从 Mesh 体素化为 SDF
+openvdb::FloatGrid* vdb_grid_from_mesh(
+    const float* positions,
+    int vertex_count,
+    const int* indices,
+    int index_count,
+    float voxel_size,
     float scale)
 {
-    std::ifstream in(path);
-    if (!in.is_open()) return false;
-
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.size() < 2) continue;
-
-        if (line.rfind("v ", 0) == 0) {
-            std::istringstream ss(line.substr(2));
-            float x = 0.0f, y = 0.0f, z = 0.0f;
-            if (ss >> x >> y >> z) {
-                points.emplace_back(x * scale, y * scale, z * scale);
-            }
-        } else if (line.rfind("f ", 0) == 0) {
-            std::istringstream ss(line.substr(2));
-            std::string token;
-            std::vector<int> face;
-            while (ss >> token) {
-                std::istringstream ts(token);
-                std::string idx_str;
-                if (!std::getline(ts, idx_str, '/')) continue;
-                if (idx_str.empty()) continue;
-
-                int idx = std::stoi(idx_str);
-                int v = 0;
-                if (idx > 0) {
-                    v = idx - 1;
-                } else if (idx < 0) {
-                    v = static_cast<int>(points.size()) + idx;
-                } else {
-                    continue;
-                }
-                face.push_back(v);
-            }
-
-            if (face.size() >= 3) {
-                for (size_t i = 1; i + 1 < face.size(); ++i) {
-                    triangles.emplace_back(face[0], face[i], face[i + 1]);
-                }
-            }
-        }
+    if (!positions || !indices || vertex_count <= 0 || index_count <= 0) {
+        return nullptr;
     }
 
-    return !points.empty() && !triangles.empty();
-}
-
-// 从 OBJ 体素化为 SDF
-openvdb::FloatGrid* create_from_obj(
-    const char* path, float voxel_size, float scale)
-{
     std::vector<openvdb::Vec3s> points;
+    points.reserve(static_cast<size_t>(vertex_count));
+    for (int i = 0; i < vertex_count; ++i) {
+        const int base = i * 3;
+        points.emplace_back(
+            positions[base + 0] * scale,
+            positions[base + 1] * scale,
+            positions[base + 2] * scale);
+    }
+
     std::vector<openvdb::Vec3I> triangles;
-    if (!parse_obj(path, points, triangles, scale)) {
+    triangles.reserve(static_cast<size_t>(index_count / 3));
+    for (int i = 0; i + 2 < index_count; i += 3) {
+        const int a = indices[i + 0];
+        const int b = indices[i + 1];
+        const int c = indices[i + 2];
+        if (a < 0 || b < 0 || c < 0) {
+            continue;
+        }
+        if (a >= vertex_count || b >= vertex_count || c >= vertex_count) {
+            continue;
+        }
+        triangles.emplace_back(a, b, c);
+    }
+
+    if (points.empty() || triangles.empty()) {
         return nullptr;
     }
 

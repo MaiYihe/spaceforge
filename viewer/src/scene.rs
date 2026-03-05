@@ -2,9 +2,8 @@ use bevy::log::{error, info};
 use bevy::math::vec3;
 use bevy::prelude::*;
 use bevy::render::mesh::Mesh;
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
-use std::sync::mpsc as std_mpsc;
 
 use crate::camera::OrbitCamera;
 use crate::config::{SceneFileConfig, ViewerConfig};
@@ -29,12 +28,20 @@ pub struct ScenePayload {
 #[derive(Resource)]
 pub struct SceneReceiver(pub Option<Receiver<ScenePayload>>);
 
+#[derive(Resource, Debug, Clone, Copy)]
+pub(crate) enum PlacementRenderMode {
+    Mesh,
+    Voxels,
+}
+
 #[derive(Resource)]
-struct FileWatchResource {
-    rx: std_mpsc::Receiver<notify::Result<notify::Event>>,
+pub(crate) struct FileWatchResource {
+    rx: Receiver<notify::Result<notify::Event>>,
     _watcher: RecommendedWatcher,
     scene_path: String,
     transforms_path: String,
+    debug_points_path: String,
+    debug_boundary_path: String,
 }
 
 #[derive(Resource, Default)]
@@ -42,6 +49,17 @@ pub(crate) struct SceneEntities {
     entities: Vec<Entity>,
 }
 
+#[derive(Resource, Default)]
+pub(crate) struct DebugPointsEntities {
+    entities: Vec<Entity>,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct DebugBoundaryPoints {
+    pub points: Vec<Vec3>,
+    pub color: Color,
+    pub y_offset: f32,
+}
 #[derive(Default, Resource)]
 pub(crate) struct SceneTransforms {
     space_meshes: Vec<IndexedTransform>,
@@ -61,6 +79,9 @@ pub fn setup(
     _config: Res<ViewerConfig>,
 ) {
     commands.insert_resource(SceneEntities::default());
+    commands.insert_resource(DebugPointsEntities::default());
+    commands.insert_resource(DebugBoundaryPoints::default());
+    commands.insert_resource(load_render_mode());
     commands.insert_resource(load_transforms_resource());
 
     let center = Vec3::ZERO;
@@ -101,7 +122,16 @@ pub fn init_file_watcher(mut commands: Commands) {
     let scene_path = std::env::var("SCENE_JSON").unwrap_or_else(|_| "/tmp/spaceforge/scene.json".into());
     let transforms_path =
         std::env::var("SCENE_TRANSFORMS").unwrap_or_else(|_| "/tmp/spaceforge/transforms.json".into());
-    match create_file_watcher(&scene_path, &transforms_path) {
+    let debug_points_path =
+        std::env::var("SCENE_DEBUG_POINTS").unwrap_or_else(|_| "/tmp/spaceforge/debug_points.json".into());
+    let debug_boundary_path =
+        std::env::var("SCENE_DEBUG_BOUNDARY").unwrap_or_else(|_| "/tmp/spaceforge/debug_boundary.json".into());
+    match create_file_watcher(
+        &scene_path,
+        &transforms_path,
+        &debug_points_path,
+        &debug_boundary_path,
+    ) {
         Ok(resource) => commands.insert_resource(resource),
         Err(err) => error!("Failed to init file watcher: {}", err),
     }
@@ -114,7 +144,10 @@ pub fn load_scene_from_file(
     mut cam: ResMut<OrbitCamera>,
     mut scene_info: ResMut<SceneInfo>,
     mut entities: ResMut<SceneEntities>,
+    mut debug_entities: ResMut<DebugPointsEntities>,
+    mut boundary_points: ResMut<DebugBoundaryPoints>,
     transforms: Res<SceneTransforms>,
+    render_mode: Res<PlacementRenderMode>,
 ) {
     let path = std::env::var("SCENE_JSON").unwrap_or_else(|_| "/tmp/spaceforge/scene.json".into());
     if let Some(payload) = load_scene_from_json(&path) {
@@ -127,8 +160,26 @@ pub fn load_scene_from_file(
             &mut scene_info,
             &mut entities,
             &transforms,
+            *render_mode,
         );
     }
+
+    let debug_path =
+        std::env::var("SCENE_DEBUG_POINTS").unwrap_or_else(|_| "/tmp/spaceforge/debug_points.json".into());
+    load_debug_points_from_path(
+        &debug_path,
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &mut debug_entities,
+    );
+
+    let boundary_path = std::env::var("SCENE_DEBUG_BOUNDARY")
+        .unwrap_or_else(|_| "/tmp/spaceforge/debug_boundary.json".into());
+    load_debug_boundary_from_path(
+        &boundary_path,
+        &mut boundary_points,
+    );
 }
 
 pub fn apply_scene_updates(
@@ -140,6 +191,7 @@ pub fn apply_scene_updates(
     mut entities: ResMut<SceneEntities>,
     transforms: Res<SceneTransforms>,
     receiver: Res<SceneReceiver>,
+    render_mode: Res<PlacementRenderMode>,
 ) {
     let Some(rx) = receiver.0.as_ref() else {
         return;
@@ -154,55 +206,6 @@ pub fn apply_scene_updates(
         return;
     };
 
-    apply_payload(
-        &payload,
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &mut cam,
-        &mut scene_info,
-        &mut entities,
-        &transforms,
-    );
-}
-
-pub fn apply_file_watch_updates(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut cam: ResMut<OrbitCamera>,
-    mut scene_info: ResMut<SceneInfo>,
-    mut entities: ResMut<SceneEntities>,
-    mut transforms: ResMut<SceneTransforms>,
-    watcher: Option<Res<FileWatchResource>>,
-) {
-    let Some(watcher) = watcher else {
-        return;
-    };
-
-    let mut changed = false;
-    while let Ok(event) = watcher.rx.try_recv() {
-        match event {
-            Ok(event) => {
-                if event.paths.iter().any(|p| {
-                    let path = p.to_string_lossy();
-                    path == watcher.scene_path || path == watcher.transforms_path
-                }) {
-                    changed = true;
-                }
-            }
-            Err(err) => {
-                error!("File watch error: {}", err);
-            }
-        }
-    }
-
-    if !changed {
-        return;
-    }
-
-    *transforms = load_transforms_from_path(&watcher.transforms_path);
-    if let Some(payload) = load_scene_from_json(&watcher.scene_path) {
         apply_payload(
             &payload,
             &mut commands,
@@ -212,6 +215,81 @@ pub fn apply_file_watch_updates(
             &mut scene_info,
             &mut entities,
             &transforms,
+            *render_mode,
+        );
+}
+
+pub fn apply_file_watch_updates(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut cam: ResMut<OrbitCamera>,
+    mut scene_info: ResMut<SceneInfo>,
+    mut entities: ResMut<SceneEntities>,
+    mut debug_entities: ResMut<DebugPointsEntities>,
+    mut boundary_points: ResMut<DebugBoundaryPoints>,
+    mut transforms: ResMut<SceneTransforms>,
+    watcher: Res<FileWatchResource>,
+    render_mode: Res<PlacementRenderMode>,
+) {
+    let mut changed = false;
+    let mut debug_changed = false;
+    let mut boundary_changed = false;
+    while let Ok(event) = watcher.rx.try_recv() {
+        match event {
+            Ok(event) => {
+                for path in event.paths.iter() {
+                    let path = path.to_string_lossy();
+                    if path == watcher.scene_path || path == watcher.transforms_path {
+                        changed = true;
+                    }
+                    if path == watcher.debug_points_path {
+                        debug_changed = true;
+                        break;
+                    }
+                    if path == watcher.debug_boundary_path {
+                        boundary_changed = true;
+                        break;
+                    }
+                }
+            }
+            Err(err) => {
+                error!("File watch error: {}", err);
+            }
+        }
+    }
+
+    if changed {
+        *transforms = load_transforms_from_path(&watcher.transforms_path);
+        if let Some(payload) = load_scene_from_json(&watcher.scene_path) {
+            apply_payload(
+                &payload,
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                &mut cam,
+                &mut scene_info,
+                &mut entities,
+                &transforms,
+                *render_mode,
+            );
+        }
+    }
+
+    if debug_changed {
+        load_debug_points_from_path(
+            &watcher.debug_points_path,
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &mut debug_entities,
+        );
+    }
+
+    if boundary_changed {
+        load_debug_boundary_from_path(
+            &watcher.debug_boundary_path,
+            &mut boundary_points,
         );
     }
 }
@@ -225,6 +303,7 @@ fn apply_payload(
     scene_info: &mut SceneInfo,
     entities: &mut SceneEntities,
     transforms: &SceneTransforms,
+    render_mode: PlacementRenderMode,
 ) {
     for e in entities.entities.drain(..) {
         commands.entity(e).despawn_recursive();
@@ -296,27 +375,44 @@ fn apply_payload(
             .id();
         entities.entities.push(id);
 
-        let forbidden_mesh = mesh_from_geometry(
-            apply_optional_transform(
-                placement.regions.forbidden_region.mesh.positions.clone(),
-                placement_transform,
-            ),
-            placement.regions.forbidden_region.mesh.indices.clone(),
-        );
-        let forbidden_material = materials.add(StandardMaterial {
-            base_color: Color::rgba(1.0, 0.3, 0.2, 0.4),
-            alpha_mode: AlphaMode::Blend,
-            unlit: true,
-            ..default()
-        });
-        let id = commands
-            .spawn(PbrBundle {
-                mesh: meshes.add(forbidden_mesh),
-                material: forbidden_material,
-                ..default()
-            })
-            .id();
-        entities.entities.push(id);
+        match render_mode {
+            PlacementRenderMode::Mesh => {
+                let forbidden_mesh = mesh_from_geometry(
+                    apply_optional_transform(
+                        placement.regions.forbidden_region.mesh.positions.clone(),
+                        placement_transform,
+                    ),
+                    placement.regions.forbidden_region.mesh.indices.clone(),
+                );
+                let forbidden_material = materials.add(StandardMaterial {
+                    base_color: Color::rgba(1.0, 0.3, 0.2, 0.4),
+                    alpha_mode: AlphaMode::Blend,
+                    unlit: true,
+                    ..default()
+                });
+                let id = commands
+                    .spawn(PbrBundle {
+                        mesh: meshes.add(forbidden_mesh),
+                        material: forbidden_material,
+                        ..default()
+                    })
+                    .id();
+                entities.entities.push(id);
+            }
+            PlacementRenderMode::Voxels => {
+                if let Some(sdf) = &placement.regions.forbidden_region.sdf {
+                    spawn_voxels(
+                        commands,
+                        meshes,
+                        materials,
+                        entities,
+                        sdf,
+                        placement_transform,
+                        Color::rgba(1.0, 0.3, 0.2, 0.6),
+                    );
+                }
+            }
+        }
 
         if !placement.visual.footprint_2d.positions.is_empty()
             && !placement.visual.footprint_2d.indices.is_empty()
@@ -343,6 +439,57 @@ fn apply_payload(
                 .id();
             entities.entities.push(id);
         }
+    }
+}
+
+fn load_render_mode() -> PlacementRenderMode {
+    let mode = std::env::var("PLACEMENT_REGION_RENDER").unwrap_or_else(|_| "mesh".to_string());
+    match mode.to_ascii_lowercase().as_str() {
+        "voxels" | "voxel" | "sdf" => PlacementRenderMode::Voxels,
+        _ => PlacementRenderMode::Mesh,
+    }
+}
+
+fn spawn_voxels(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    entities: &mut SceneEntities,
+    sdf: &geometry_core::models::placement_region::SdfGrid,
+    transform: Option<&[[f32; 4]; 4]>,
+    color: Color,
+) {
+    let centers = match sdf.grid.active_voxel_centers() {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    if centers.is_empty() {
+        log::info!("viewer::scene: voxel centers empty");
+        return;
+    }
+    log::info!("viewer::scene: spawning voxels count={}", centers.len());
+    let voxel_size = sdf.voxel_size.max(1.0);
+    let mesh_handle = meshes.add(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+    let material = materials.add(StandardMaterial {
+        base_color: color,
+        unlit: true,
+        ..default()
+    });
+    for p in centers {
+        let mut pos = [p[0], p[1], p[2]];
+        if let Some(m) = transform {
+            apply_transform_point(&mut pos, m);
+        }
+        let id = commands
+            .spawn(PbrBundle {
+                mesh: mesh_handle.clone(),
+                material: material.clone(),
+                transform: Transform::from_translation(Vec3::new(pos[0], pos[1], pos[2]))
+                    .with_scale(Vec3::splat(voxel_size)),
+                ..default()
+            })
+            .id();
+        entities.entities.push(id);
     }
 }
 
@@ -570,10 +717,18 @@ fn load_transforms_from_path(path: &str) -> SceneTransforms {
 fn create_file_watcher(
     scene_path: &str,
     transforms_path: &str,
+    debug_points_path: &str,
+    debug_boundary_path: &str,
 ) -> Result<FileWatchResource, String> {
-    let (tx, rx) = std_mpsc::channel();
-    let mut watcher = RecommendedWatcher::new(tx, NotifyConfig::default())
-        .map_err(|err| format!("create watcher failed: {err}"))?;
+    let (tx, rx): (Sender<notify::Result<notify::Event>>, Receiver<notify::Result<notify::Event>>) =
+        crossbeam_channel::unbounded();
+    let mut watcher = RecommendedWatcher::new(
+        move |res| {
+            let _ = tx.send(res);
+        },
+        NotifyConfig::default(),
+    )
+    .map_err(|err| format!("create watcher failed: {err}"))?;
     watcher
         .watch(std::path::Path::new(scene_path), RecursiveMode::NonRecursive)
         .map_err(|err| format!("watch scene.json failed: {err}"))?;
@@ -583,13 +738,164 @@ fn create_file_watcher(
             RecursiveMode::NonRecursive,
         )
         .map_err(|err| format!("watch transforms.json failed: {err}"))?;
+    watcher
+        .watch(
+            std::path::Path::new(debug_points_path),
+            RecursiveMode::NonRecursive,
+        )
+        .map_err(|err| format!("watch debug_points.json failed: {err}"))?;
+    watcher
+        .watch(
+            std::path::Path::new(debug_boundary_path),
+            RecursiveMode::NonRecursive,
+        )
+        .map_err(|err| format!("watch debug_boundary.json failed: {err}"))?;
 
     Ok(FileWatchResource {
         rx,
         _watcher: watcher,
         scene_path: scene_path.to_string(),
         transforms_path: transforms_path.to_string(),
+        debug_points_path: debug_points_path.to_string(),
+        debug_boundary_path: debug_boundary_path.to_string(),
     })
+}
+
+#[derive(serde::Deserialize)]
+struct DebugPointsFile {
+    points: Vec<[f32; 3]>,
+    #[serde(default)]
+    color: Option<[f32; 3]>,
+    #[serde(default)]
+    radius: Option<f32>,
+}
+
+fn load_debug_points_from_path(
+    path: &str,
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    entities: &mut DebugPointsEntities,
+) {
+    let data = match std::fs::read_to_string(path) {
+        Ok(data) => data,
+        Err(err) => {
+            info!("Debug points not loaded ({}): {}", path, err);
+            return;
+        }
+    };
+    let parsed: DebugPointsFile = match serde_json::from_str(&data) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            error!("Failed to parse debug points {}: {}", path, err);
+            return;
+        }
+    };
+
+    for e in entities.entities.drain(..) {
+        commands.entity(e).despawn_recursive();
+    }
+
+    info!(
+        "Loaded debug points: {} points, first={:?}",
+        parsed.points.len(),
+        parsed.points.first().copied()
+    );
+    if let Some((min, max)) = bounds_for_points(&parsed.points) {
+        info!("Debug points bounds: min={:?} max={:?}", min, max);
+    }
+
+    let color = parsed.color.unwrap_or([0.9, 0.8, 0.2]);
+    let radius = parsed.radius.unwrap_or(6.0);
+    let material = materials.add(StandardMaterial {
+        base_color: Color::rgb(color[0], color[1], color[2]),
+        unlit: true,
+        ..default()
+    });
+    let sphere = meshes.add(Mesh::from(Sphere::new(1.0)));
+
+    for p in parsed.points {
+        let id = commands
+            .spawn(PbrBundle {
+                mesh: sphere.clone(),
+                material: material.clone(),
+                transform: Transform::from_translation(Vec3::new(p[0], p[1], p[2]))
+                    .with_scale(Vec3::splat(radius)),
+                ..default()
+            })
+            .id();
+        entities.entities.push(id);
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct DebugBoundaryFile {
+    points: Vec<[f32; 3]>,
+    #[serde(default)]
+    color: Option<[f32; 3]>,
+}
+
+fn load_debug_boundary_from_path(
+    path: &str,
+    boundary: &mut DebugBoundaryPoints,
+) {
+    let data = match std::fs::read_to_string(path) {
+        Ok(data) => data,
+        Err(err) => {
+            info!("Debug boundary not loaded ({}): {}", path, err);
+            return;
+        }
+    };
+    let parsed: DebugBoundaryFile = match serde_json::from_str(&data) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            error!("Failed to parse debug boundary {}: {}", path, err);
+            return;
+        }
+    };
+
+    if parsed.points.len() < 2 {
+        info!("Debug boundary has <2 points ({}).", path);
+        boundary.points.clear();
+        return;
+    }
+    info!(
+        "Loaded debug boundary: {} points, first={:?}",
+        parsed.points.len(),
+        parsed.points.first().copied()
+    );
+    if let Some((min, max)) = bounds_for_points(&parsed.points) {
+        info!(
+            "Debug boundary bounds: min={:?} max={:?}",
+            min, max
+        );
+    }
+
+    let color = parsed.color.unwrap_or([0.8, 0.2, 0.15]);
+    boundary.color = Color::rgb(color[0], color[1], color[2]);
+    boundary.y_offset = 5.0;
+    boundary.points = parsed
+        .points
+        .into_iter()
+        .map(|p| Vec3::new(p[0], p[1], p[2]))
+        .collect();
+}
+
+fn bounds_for_points(points: &[[f32; 3]]) -> Option<(Vec3, Vec3)> {
+    if points.is_empty() {
+        return None;
+    }
+    let mut min = Vec3::splat(f32::INFINITY);
+    let mut max = Vec3::splat(f32::NEG_INFINITY);
+    for p in points {
+        min.x = min.x.min(p[0]);
+        min.y = min.y.min(p[1]);
+        min.z = min.z.min(p[2]);
+        max.x = max.x.max(p[0]);
+        max.y = max.y.max(p[1]);
+        max.z = max.z.max(p[2]);
+    }
+    Some((min, max))
 }
 
 fn find_transform(transforms: &[IndexedTransform], index: usize) -> Option<&[[f32; 4]; 4]> {
@@ -611,11 +917,15 @@ fn apply_optional_transform(
 
 fn apply_transform_positions(positions: &mut [[f32; 3]], m: &[[f32; 4]; 4]) {
     for p in positions.iter_mut() {
-        let x = p[0];
-        let y = p[1];
-        let z = p[2];
-        p[0] = x * m[0][0] + y * m[1][0] + z * m[2][0] + m[3][0];
-        p[1] = x * m[0][1] + y * m[1][1] + z * m[2][1] + m[3][1];
-        p[2] = x * m[0][2] + y * m[1][2] + z * m[2][2] + m[3][2];
+        apply_transform_point(p, m);
     }
+}
+
+fn apply_transform_point(p: &mut [f32; 3], m: &[[f32; 4]; 4]) {
+    let x = p[0];
+    let y = p[1];
+    let z = p[2];
+    p[0] = x * m[0][0] + y * m[1][0] + z * m[2][0] + m[3][0];
+    p[1] = x * m[0][1] + y * m[1][1] + z * m[2][1] + m[3][1];
+    p[2] = x * m[0][2] + y * m[1][2] + z * m[2][2] + m[3][2];
 }

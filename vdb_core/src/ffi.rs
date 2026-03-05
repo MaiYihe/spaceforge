@@ -4,7 +4,14 @@ pub type Grid = c_void;
 
 extern "C" {
     pub(crate) fn vdb_init();
-    pub(crate) fn create_from_obj(path: *const i8, voxel_size: f32, scale: f32) -> *mut Grid;
+    pub(crate) fn vdb_grid_from_mesh(
+        positions: *const f32,
+        vertex_count: i32,
+        indices: *const i32,
+        index_count: i32,
+        voxel_size: f32,
+        scale: f32,
+    ) -> *mut Grid;
     pub(crate) fn vdb_mesh_from_grid(
         grid: *mut Grid,
         isovalue: f32,

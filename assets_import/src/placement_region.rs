@@ -7,8 +7,11 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::{Arc, Once};
+use utils::time_ms;
 use types::RegionsType;
 use usd_core::load_placement_region_usda;
+use vdb_core::VdbGrid;
 
 pub fn load_placement_region_model_from_usda(
     path: &str,
@@ -37,6 +40,11 @@ pub fn load_placement_region_model_from_usda(
     let restricted_local = to_mesh_data_from_placement(restricted_mesh, scale)?;
     let forbidden_local = to_mesh_data_from_placement(forbidden_mesh, scale)?;
 
+    let restricted_sdf = build_sdf(&restricted_local.positions, &restricted_local.indices)?;
+    log_sdf_voxels("restricted_region", &restricted_sdf);
+    let forbidden_sdf = build_sdf(&forbidden_local.positions, &forbidden_local.indices)?;
+    log_sdf_voxels("forbidden_region", &forbidden_sdf);
+
     let footprint_mesh = if let Some(mesh) = region.footprint_2d.as_ref() {
         let local = to_mesh_data_from_placement(mesh, scale)?;
         Some(RegionMesh {
@@ -59,14 +67,14 @@ pub fn load_placement_region_model_from_usda(
                     positions: forbidden_local.positions,
                     indices: forbidden_local.indices,
                 },
-                sdf: None,
+                sdf: Some(forbidden_sdf),
             },
             restricted_region: Region {
                 mesh: RegionMesh {
                     positions: restricted_local.positions,
                     indices: restricted_local.indices,
                 },
-                sdf: None,
+                sdf: Some(restricted_sdf),
             },
         },
         semantics: PlacementSemantics {
@@ -79,6 +87,39 @@ pub fn load_placement_region_model_from_usda(
         },
     };
     Ok(region)
+}
+
+fn build_sdf(positions: &[[f32; 3]], indices: &[u32]) -> Result<geometry_core::models::placement_region::SdfGrid, String> {
+    const VOXEL_SIZE_MM: f32 = 20.0;
+    ensure_vdb_init();
+    info!(
+        "assets_import: building sdf voxels (positions={}, indices={})",
+        positions.len(),
+        indices.len()
+    );
+    let grid = time_ms("assets_import: sdf build", || {
+        VdbGrid::from_mesh(positions, indices, VOXEL_SIZE_MM, 1.0)
+    })?;
+    Ok(geometry_core::models::placement_region::SdfGrid {
+        grid: Arc::new(grid),
+        voxel_size: VOXEL_SIZE_MM,
+    })
+}
+
+fn ensure_vdb_init() {
+    static INIT: Once = Once::new();
+    INIT.call_once(VdbGrid::init);
+}
+
+fn log_sdf_voxels(label: &str, sdf: &geometry_core::models::placement_region::SdfGrid) {
+    match sdf.grid.active_voxel_coords() {
+        Ok(coords) => {
+            info!("assets_import: {label} voxel count={}", coords.len());
+        }
+        Err(err) => {
+            info!("assets_import: {label} voxel count unavailable: {err}");
+        }
+    }
 }
 
 pub fn load_placement_regions_from_dir(
@@ -165,6 +206,20 @@ fn log_placement_json(placements: &[(String, usize)], regions: &[PlacementRegion
             let restricted = &placement.regions.restricted_region.mesh;
             let forbidden = &placement.regions.forbidden_region.mesh;
             let footprint = &placement.visual.footprint_2d;
+            let restricted_voxels = placement
+                .regions
+                .restricted_region
+                .sdf
+                .as_ref()
+                .and_then(|sdf| sdf.grid.active_voxel_coords().ok())
+                .map(|v| v.len());
+            let forbidden_voxels = placement
+                .regions
+                .forbidden_region
+                .sdf
+                .as_ref()
+                .and_then(|sdf| sdf.grid.active_voxel_coords().ok())
+                .map(|v| v.len());
             json!({
                 "id": idx,
                 "file": name,
@@ -173,12 +228,18 @@ fn log_placement_json(placements: &[(String, usize)], regions: &[PlacementRegion
                         "mesh": {
                             "vertices": restricted.positions.len(),
                             "indices": restricted.indices.len()
+                        },
+                        "sdf": {
+                            "voxel_count": restricted_voxels
                         }
                     },
                     "forbidden_region": {
                         "mesh": {
                             "vertices": forbidden.positions.len(),
                             "indices": forbidden.indices.len()
+                        },
+                        "sdf": {
+                            "voxel_count": forbidden_voxels
                         }
                     }
                 },

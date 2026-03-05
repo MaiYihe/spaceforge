@@ -34,14 +34,13 @@ pub struct Visual {
     pub height_range: HeightRange,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct Mesh {
-    pub positions: Vec<[f32; 3]>,
-    pub indices: Vec<u32>,
-}
+pub type Mesh = crate::models::mesh::Mesh;
 
 #[derive(Debug, Clone)]
-pub struct SdfGrid;
+pub struct SdfGrid {
+    pub grid: std::sync::Arc<vdb_core::VdbGrid>,
+    pub voxel_size: f32,
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct HeightRange {

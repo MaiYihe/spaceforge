@@ -12,8 +12,4 @@ pub struct Space {
     pub surface_metas: Vec<SurfaceMeta>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct Mesh {
-    pub positions: Vec<[f32; 3]>,
-    pub indices: Vec<u32>,
-}
+pub type Mesh = crate::models::mesh::Mesh;

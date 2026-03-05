@@ -5,3 +5,7 @@ edition = "2024"
 
 [dependencies]
 types = { path = "../types" }
+nalgebra = "0.33"
+geo = "0.28"
+geo-types = "0.7"
+vdb_core = { path = "../vdb_core" }

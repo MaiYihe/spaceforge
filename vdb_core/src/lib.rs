@@ -4,12 +4,17 @@ mod ffi;
 use std::ptr::NonNull;
 
 type Grid = ffi::Grid;
-use std::ffi::CString;
 
 #[derive(Debug)]
 pub struct VdbGrid {
     raw: NonNull<Grid>,
 }
+
+// SAFETY: VdbGrid wraps a pointer to an OpenVDB grid. We only use it through
+// FFI calls that are thread-safe for read-only operations in this project.
+// We do not free the underlying grid yet, so ownership remains stable.
+unsafe impl Send for VdbGrid {}
+unsafe impl Sync for VdbGrid {}
 
 #[derive(Debug, Clone)]
 pub struct VdbMesh {
@@ -22,9 +27,32 @@ impl VdbGrid {
         unsafe { ffi::vdb_init() }
     }
 
-    pub fn from_obj_path(path: &str, voxel_size: f32, scale: f32) -> Result<Self, String> {
-        let c_path = CString::new(path).map_err(|_| "obj path contains NUL byte".to_string())?;
-        let raw = unsafe { ffi::create_from_obj(c_path.as_ptr(), voxel_size, scale) };
+    pub fn from_mesh(
+        positions: &[[f32; 3]],
+        indices: &[u32],
+        voxel_size: f32,
+        scale: f32,
+    ) -> Result<Self, String> {
+        if positions.is_empty() || indices.len() < 3 {
+            return Err("mesh has no vertices or indices".to_string());
+        }
+        let mut idx_i32 = Vec::with_capacity(indices.len());
+        for &idx in indices {
+            if idx > i32::MAX as u32 {
+                return Err("mesh index exceeds i32::MAX".to_string());
+            }
+            idx_i32.push(idx as i32);
+        }
+        let raw = unsafe {
+            ffi::vdb_grid_from_mesh(
+                positions.as_ptr() as *const f32,
+                positions.len() as i32,
+                idx_i32.as_ptr(),
+                idx_i32.len() as i32,
+                voxel_size,
+                scale,
+            )
+        };
         unsafe { Self::from_raw(raw) }.ok_or_else(|| "failed to create VDB grid".to_string())
     }
 
