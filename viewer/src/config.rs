@@ -6,8 +6,6 @@ pub struct ViewerConfig {
     pub space_usda_path: String,
     pub placement_region_usda_dir: String,
     pub regions_type_path: String,
-    #[serde(default = "default_usda_scale")]
-    pub usda_scale: f32,
 }
 
 impl Default for ViewerConfig {
@@ -16,13 +14,8 @@ impl Default for ViewerConfig {
             space_usda_path: String::new(),
             placement_region_usda_dir: String::new(),
             regions_type_path: String::new(),
-            usda_scale: default_usda_scale(),
         }
     }
-}
-
-fn default_usda_scale() -> f32 {
-    1.0
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -30,5 +23,4 @@ pub struct SceneFileConfig {
     pub space_usda_path: String,
     pub placement_region_usda_dir: String,
     pub regions_type_path: String,
-    pub usda_scale: f32,
 }

@@ -27,14 +27,16 @@ fn load_space_model_smoke() {
         .expect("load_space_model_from_usda failed");
 
     let mut meshes_out = Vec::new();
-    for (idx, mesh) in space.meshes.iter().enumerate() {
-        let vertices = mesh.positions.len();
+    for (idx, surface) in space.surfaces.iter().enumerate() {
+        let vertices = surface.mesh.positions.len();
+        let boundary_vertices = surface.boundary.len();
         let meta = space.surface_metas.get(idx);
         let mask_bits = meta.map(|m| m.regions_type_mask.bits());
         let mask_binary = mask_bits.map(|bits| format!("{:032b}", bits));
         meshes_out.push(json!({
             "mesh_id": idx,
             "mesh": { "vertices": vertices },
+            "boundary_vertices": boundary_vertices,
             "regions_type_mask_binary": mask_binary
         }));
     }
@@ -44,8 +46,8 @@ fn load_space_model_smoke() {
     });
 
     println!("{}", serde_json::to_string_pretty(&payload).unwrap());
-    assert!(!space.meshes.is_empty(), "expected at least one mesh");
-    assert_eq!(space.meshes.len(), space.surface_metas.len());
+    assert!(!space.surfaces.is_empty(), "expected at least one mesh");
+    assert_eq!(space.surfaces.len(), space.surface_metas.len());
 }
 
 //  USD_CORE_TEST=1 cargo test -p assets_import --test space -- --nocapture

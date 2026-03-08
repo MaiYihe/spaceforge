@@ -3,6 +3,9 @@ use bevy::prelude::*;
 pub fn draw_gizmos(
     mut gizmos: Gizmos,
     boundary: Res<crate::scene::DebugBoundaryPoints>,
+    space_boundaries: Res<crate::scene::DebugSpaceBoundaries>,
+    nfp: Res<crate::scene::DebugNfpData>,
+    ifp: Res<crate::scene::DebugIfpData>,
 ) {
     let grid_size = 20;
     let step = 500.0;
@@ -33,6 +36,68 @@ pub fn draw_gizmos(
         }
         let first = boundary.points[0] + Vec3::new(0.0, boundary.y_offset, 0.0);
         gizmos.line(prev, first, boundary.color);
+    }
+
+    for loop_points in &space_boundaries.loops {
+        if loop_points.len() < 2 {
+            continue;
+        }
+        let mut prev = loop_points[0] + Vec3::new(0.0, space_boundaries.y_offset, 0.0);
+        for p in loop_points.iter().skip(1) {
+            let curr = *p + Vec3::new(0.0, space_boundaries.y_offset, 0.0);
+            gizmos.line(prev, curr, space_boundaries.color);
+            prev = curr;
+        }
+        let first = loop_points[0] + Vec3::new(0.0, space_boundaries.y_offset, 0.0);
+        gizmos.line(prev, first, space_boundaries.color);
+    }
+
+    for loop_points in &nfp.rect_loops {
+        if loop_points.len() < 2 {
+            continue;
+        }
+        let mut prev = loop_points[0];
+        for p in loop_points.iter().skip(1) {
+            gizmos.line(prev, *p, Color::YELLOW);
+            prev = *p;
+        }
+        gizmos.line(prev, loop_points[0], Color::YELLOW);
+    }
+
+    for loop_points in &nfp.nfp_loops {
+        if loop_points.len() < 2 {
+            continue;
+        }
+        let mut prev = loop_points[0];
+        for p in loop_points.iter().skip(1) {
+            gizmos.line(prev, *p, Color::ORANGE);
+            prev = *p;
+        }
+        gizmos.line(prev, loop_points[0], Color::ORANGE);
+    }
+
+    for loop_points in &ifp.loops {
+        if loop_points.len() < 2 {
+            continue;
+        }
+        let mut prev = loop_points[0];
+        for p in loop_points.iter().skip(1) {
+            gizmos.line(prev, *p, Color::GREEN);
+            prev = *p;
+        }
+        gizmos.line(prev, loop_points[0], Color::GREEN);
+    }
+
+    for loop_points in &ifp.instance_loops {
+        if loop_points.len() < 2 {
+            continue;
+        }
+        let mut prev = loop_points[0];
+        for p in loop_points.iter().skip(1) {
+            gizmos.line(prev, *p, Color::PINK);
+            prev = *p;
+        }
+        gizmos.line(prev, loop_points[0], Color::PINK);
     }
 }
 

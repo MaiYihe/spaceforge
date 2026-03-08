@@ -1,0 +1,13 @@
+[package]
+name = "clipper2_core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[build-dependencies]
+cc = "1"
+
+[features]
+# Force stub build (no Clipper2 headers required)
+stub = []

@@ -8,6 +8,28 @@ pub fn flatten_outer_boundary(mesh: &Mesh) -> Vec<[f32; 3]> {
     flatten_outer_boundary_common(&mesh.positions, &mesh.indices)
 }
 
+/// Returns the mesh boundary loop using topological edges (edges appearing once).
+pub fn mesh_boundary_loop(mesh: &Mesh) -> Vec<[f32; 3]> {
+    if mesh.positions.len() < 3 || mesh.indices.len() < 3 {
+        return Vec::new();
+    }
+    let loops = boundary_loops_3d(&mesh.positions, &mesh.indices);
+    let Some(loop_indices) = loops
+        .into_iter()
+        .max_by(|a, b| loop_perimeter_3d(a, &mesh.positions).partial_cmp(&loop_perimeter_3d(b, &mesh.positions)).unwrap())
+    else {
+        return Vec::new();
+    };
+    let mut out = loop_indices
+        .into_iter()
+        .map(|idx| mesh.positions[idx])
+        .collect::<Vec<_>>();
+    if out.len() > 1 && out.first() == out.last() {
+        out.pop();
+    }
+    out
+}
+
 fn flatten_outer_boundary_common(
     positions: &[[f32; 3]],
     indices: &[u32],
@@ -116,6 +138,77 @@ fn boundary_loops(indices: &[u32], verts: &[[f32; 2]]) -> Vec<Vec<usize>> {
     loops
 }
 
+fn boundary_loops_3d(verts: &[[f32; 3]], indices: &[u32]) -> Vec<Vec<usize>> {
+    let mut edge_counts: HashMap<(usize, usize), u32> = HashMap::new();
+
+    let mut i = 0;
+    while i + 2 < indices.len() {
+        let a = indices[i] as usize;
+        let b = indices[i + 1] as usize;
+        let c = indices[i + 2] as usize;
+        i += 3;
+        if a >= verts.len() || b >= verts.len() || c >= verts.len() {
+            continue;
+        }
+        add_edge(a, b, &mut edge_counts);
+        add_edge(b, c, &mut edge_counts);
+        add_edge(c, a, &mut edge_counts);
+    }
+
+    let mut adjacency: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for ((u, v), count) in edge_counts {
+        if count == 1 {
+            adjacency.entry(u).or_default().push(v);
+            adjacency.entry(v).or_default().push(u);
+        }
+    }
+
+    let mut loops = Vec::new();
+    let mut visited_edges: HashMap<(usize, usize), bool> = HashMap::new();
+
+    for (&start, neighbors) in &adjacency {
+        for &next in neighbors {
+            if visited_edges.get(&(start, next)).copied().unwrap_or(false) {
+                continue;
+            }
+            let mut loop_vertices = Vec::new();
+            let mut prev = start;
+            let mut curr = next;
+            loop_vertices.push(start);
+
+            loop {
+                visited_edges.insert((prev, curr), true);
+                visited_edges.insert((curr, prev), true);
+                loop_vertices.push(curr);
+
+                let next_candidates = adjacency.get(&curr).map(|v| v.as_slice()).unwrap_or(&[]);
+                let mut chosen = None;
+                for &cand in next_candidates {
+                    if cand != prev {
+                        chosen = Some(cand);
+                        break;
+                    }
+                }
+                let Some(next_v) = chosen else { break; };
+                prev = curr;
+                curr = next_v;
+                if curr == start {
+                    break;
+                }
+                if loop_vertices.len() > verts.len() + 1 {
+                    break;
+                }
+            }
+
+            if loop_vertices.len() >= 3 {
+                loops.push(loop_vertices);
+            }
+        }
+    }
+
+    loops
+}
+
 fn add_edge(a: usize, b: usize, edge_counts: &mut HashMap<(usize, usize), u32>) {
     let key = if a < b { (a, b) } else { (b, a) };
     *edge_counts.entry(key).or_insert(0) += 1;
@@ -132,6 +225,22 @@ fn loop_perimeter(indices: &[usize], verts: &[[f32; 2]]) -> f32 {
         let dx = a[0] - b[0];
         let dy = a[1] - b[1];
         sum += (dx * dx + dy * dy).sqrt();
+    }
+    sum
+}
+
+fn loop_perimeter_3d(indices: &[usize], verts: &[[f32; 3]]) -> f32 {
+    if indices.len() < 2 {
+        return 0.0;
+    }
+    let mut sum = 0.0;
+    for i in 0..indices.len() {
+        let a = verts[indices[i]];
+        let b = verts[indices[(i + 1) % indices.len()]];
+        let dx = a[0] - b[0];
+        let dy = a[1] - b[1];
+        let dz = a[2] - b[2];
+        sum += (dx * dx + dy * dy + dz * dz).sqrt();
     }
     sum
 }

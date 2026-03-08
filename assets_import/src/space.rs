@@ -1,5 +1,6 @@
 use crate::usda_common::{mask_from_names, to_mesh_data_from_usd};
-use geometry_core::models::space::{Mesh as SpaceMesh, Space, SurfaceMeta};
+use geometry_core::geometry_ops::mesh_boundary_loop;
+use geometry_core::models::space::{Mesh as SpaceMesh, Space, SpaceSurface, SurfaceMeta};
 use log::info;
 use serde_json::json;
 use std::collections::HashMap;
@@ -16,20 +17,26 @@ pub fn load_space_model_from_usda(
     let unit_scale = unit_scale_factor(scene.unit.as_deref())?;
     let scale = scale * unit_scale;
 
-    let mut space_meshes = Vec::<SpaceMesh>::new();
+    let mut surfaces = Vec::<SpaceSurface>::new();
     let mut metas = Vec::<SurfaceMeta>::new();
 
-    for mesh in scene.meshes {
-        let local = to_mesh_data_from_usd(&mesh.mesh, scale)?;
-        space_meshes.push(SpaceMesh {
+    for usd_mesh in scene.meshes {
+        let local = to_mesh_data_from_usd(&usd_mesh.mesh, scale)?;
+        let mesh = SpaceMesh {
             positions: local.positions,
             indices: local.indices,
-        });
+        };
+        let boundary = mesh_boundary_loop(&mesh);
+        surfaces.push(SpaceSurface { mesh, boundary });
 
-        let mask = if mesh.regions_type_mask.as_ref().map_or(true, |m| m.is_empty()) {
+        let mask = if usd_mesh
+            .regions_type_mask
+            .as_ref()
+            .map_or(true, |m| m.is_empty())
+        {
             RegionsTypeMask::NONE
         } else {
-            mask_from_names(mesh.regions_type_mask.as_ref().unwrap(), regions_type_ids)?
+            mask_from_names(usd_mesh.regions_type_mask.as_ref().unwrap(), regions_type_ids)?
         };
         metas.push(SurfaceMeta {
             regions_type_mask: mask,
@@ -37,7 +44,7 @@ pub fn load_space_model_from_usda(
     }
 
     let space = Space {
-        meshes: space_meshes,
+        surfaces,
         surface_metas: metas,
     };
     log_space_json(&space);
@@ -53,6 +60,7 @@ fn log_space_json(space: &Space) {
             json!({
                 "mesh_id": idx,
                 "mesh": "Mesh",
+                "boundary_vertices": space.surfaces.get(idx).map(|s| s.boundary.len()).unwrap_or(0),
                 "regions_type_mask": meta.regions_type_mask.bits()
             })
         })

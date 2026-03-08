@@ -1,11 +1,79 @@
-use crate::models::mesh::Mesh;
 use crate::geometry_ops::plane::fit_plane_pca;
+use crate::models::mesh::Mesh;
 use nalgebra::Vector3;
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 /// Samples points on a (mostly) planar mesh by projecting to UV and
 /// taking a grid at `step_mm` (default unit is mm).
 pub fn sample_points_uv(mesh: &Mesh, step_mm: f32) -> Vec<[f32; 3]> {
     sample_points_uv_common(&mesh.positions, &mesh.indices, step_mm)
+}
+
+/// Samples `count` points on the mesh surface using area-weighted random sampling.
+/// `seed` provides deterministic results for repeatable runs.
+pub fn sample_points_area(mesh: &Mesh, count: usize, seed: u64) -> Vec<[f32; 3]> {
+    if count == 0 || mesh.positions.is_empty() || mesh.indices.len() < 3 {
+        return Vec::new();
+    }
+
+    let mut triangles = Vec::new();
+    let mut total_area = 0.0f32;
+    let mut i = 0;
+    while i + 2 < mesh.indices.len() {
+        let a = mesh.indices[i] as usize;
+        let b = mesh.indices[i + 1] as usize;
+        let c = mesh.indices[i + 2] as usize;
+        i += 3;
+        if a >= mesh.positions.len() || b >= mesh.positions.len() || c >= mesh.positions.len() {
+            continue;
+        }
+        let pa = Vector3::new(
+            mesh.positions[a][0],
+            mesh.positions[a][1],
+            mesh.positions[a][2],
+        );
+        let pb = Vector3::new(
+            mesh.positions[b][0],
+            mesh.positions[b][1],
+            mesh.positions[b][2],
+        );
+        let pc = Vector3::new(
+            mesh.positions[c][0],
+            mesh.positions[c][1],
+            mesh.positions[c][2],
+        );
+        let area = 0.5 * (pb - pa).cross(&(pc - pa)).norm();
+        if area <= f32::EPSILON {
+            continue;
+        }
+        total_area += area;
+        triangles.push((pa, pb, pc, total_area));
+    }
+
+    if total_area <= f32::EPSILON || triangles.is_empty() {
+        return Vec::new();
+    }
+
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut points = Vec::with_capacity(count);
+    for _ in 0..count {
+        let r = rng.r#gen::<f32>() * total_area;
+        let tri_idx = triangles
+            .binary_search_by(|(_, _, _, cum)| cum.partial_cmp(&r).unwrap())
+            .unwrap_or_else(|idx| idx.min(triangles.len() - 1));
+        let (a, b, c, _) = triangles[tri_idx];
+
+        let r1 = rng.r#gen::<f32>();
+        let r2 = rng.r#gen::<f32>();
+        let sqrt_r1 = r1.sqrt();
+        let u = 1.0 - sqrt_r1;
+        let v = sqrt_r1 * (1.0 - r2);
+        let w = sqrt_r1 * r2;
+        let p = a * u + b * v + c * w;
+        points.push([p.x, p.y, p.z]);
+    }
+
+    points
 }
 
 fn sample_points_uv_common(

@@ -8,15 +8,22 @@ pub fn convex_hull_xz(mesh: &Mesh) -> Vec<[f32; 3]> {
     if mesh.positions.len() < 3 {
         return Vec::new();
     }
-    let points: Vec<Coord<f64>> = mesh
-        .positions
+    convex_hull_xz_points(&mesh.positions)
+}
+
+/// Projects input points onto the XZ plane and returns the convex hull boundary (outermost ring).
+pub fn convex_hull_xz_points(points: &[[f32; 3]]) -> Vec<[f32; 3]> {
+    if points.len() < 3 {
+        return Vec::new();
+    }
+    let coords: Vec<Coord<f64>> = points
         .iter()
         .map(|p| Coord {
             x: p[0] as f64,
             y: p[2] as f64,
         })
         .collect();
-    let multipoint = MultiPoint::from(points);
+    let multipoint = MultiPoint::from(coords);
     let poly = multipoint.convex_hull();
     let mut out = Vec::new();
     for coord in poly.exterior().coords_iter() {
